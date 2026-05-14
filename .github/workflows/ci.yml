@@ -52,5 +52,8 @@ jobs:
           node-version: 24.x
           cache: "npm"
 
+      - name: Install dependencies
+        run: npm ci
+
       - name: test lint
         run: npm run typecheck
