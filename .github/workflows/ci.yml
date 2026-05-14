@@ -6,23 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  install:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24.x
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-  lint:
+  ci:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -40,37 +29,8 @@ jobs:
       - name: run lint
         run: npm run lint
 
-  typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24.x
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
       - name: type check
         run: npm run typecheck
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24.x
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
 
       - name: Cache Next.js build
         uses: actions/cache@v4
@@ -79,6 +39,7 @@ jobs:
           key: nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('**/*.ts', '**/*.tsx') }}
           restore-keys: |
             nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+
       - name: Build
         env:
           NEXT_PUBLIC_PUSHER_KEY: ${{ secrets.NEXT_PUBLIC_PUSHER_KEY }}
