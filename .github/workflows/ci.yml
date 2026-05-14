@@ -9,13 +9,15 @@ on:
 jobs:
   install:
     runs-on: ubuntu-latest
-    step:
+    steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
-      - name: install dependency
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
         run: npm ci
