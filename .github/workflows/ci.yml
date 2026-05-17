@@ -73,6 +73,11 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
+      - name: Debug pulled env (REMOVE AFTER)
+        run: |
+          echo "=== Variable names in pulled file ==="
+          grep -oE '^[A-Z_]+' .vercel/.env.preview.local || echo "(file missing or empty)"
+
       - name: Build (preview)
         if: github.ref != 'refs/heads/main'
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
