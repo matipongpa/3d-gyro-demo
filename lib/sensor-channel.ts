@@ -38,6 +38,30 @@ export const SENSOR_CHANNEL_NAME = "gyro-sensor";
 /** Pusher event name on that channel. */
 export const SENSOR_EVENT_NAME = "orientation";
 
+/** Pusher event name for geometry selection updates from /phone. */
+export const GEOMETRY_EVENT_NAME = "geometry";
+
+/** Allowed geometry kinds the phone can request the dashboard to render. */
+export const GEOMETRY_KINDS = ["sphere", "box", "torus", "cone"] as const;
+export type GeometryKind = (typeof GEOMETRY_KINDS)[number];
+
+export type GeometryMessage = {
+  type: "geometry";
+  geometry: GeometryKind;
+  timestamp: number;
+};
+
+export function isGeometryMessage(data: unknown): data is GeometryMessage {
+  if (typeof data !== "object" || data === null) return false;
+  const m = data as Record<string, unknown>;
+  return (
+    m.type === "geometry" &&
+    typeof m.geometry === "string" &&
+    (GEOMETRY_KINDS as readonly string[]).includes(m.geometry) &&
+    typeof m.timestamp === "number"
+  );
+}
+
 /**
  * The message payload the phone publishes and the dashboard consumes.
  *

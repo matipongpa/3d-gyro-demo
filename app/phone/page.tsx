@@ -1,30 +1,20 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import type { SensorMessage } from "@/lib/sensor-channel";
+import { useState, useEffect, useCallback, useRef, type Key } from "react";
+import type {
+  GeometryKind,
+  GeometryMessage,
+  SensorMessage,
+} from "@/lib/sensor-channel";
+import { GEOMETRY_KINDS } from "@/lib/sensor-channel";
+import { Label, ListBox, Select } from "@heroui/react";
 
-/**
- * Phone page — runs on the iPhone (or any device with a gyroscope).
- *
- * Flow:
- *   1. User taps "Enable Gyro" button
- *   2. We request DeviceOrientation permission (iOS 13+ requires this on user gesture)
- *   3. Once granted, listen for `deviceorientation` events
- *   4. On every event: update local display AND POST the value to /api/sensor
- *      (server then relays to /dashboard via Pusher).
- *
- * Throttling:
- *   DeviceOrientation fires ~60 times/sec. POSTing each one would burn the
- *   Pusher free tier in under an hour AND saturate the phone radio. We cap
- *   publishes to PUBLISH_INTERVAL_MS (33ms ≈ 30Hz) — visually smooth, well
- *   within free tier even with long demo sessions. Local UI state still
- *   updates at full 60Hz so the on-phone numbers feel responsive.
- *
- * Why iOS needs the permission button:
- *   On Safari iOS 13+, DeviceOrientationEvent.requestPermission() is REQUIRED
- *   and must be called inside a user-initiated event handler (a click).
- *   Without this, events fire but all values are null. Subtle and frustrating.
- */
+const GEOMETRY_LABELS: Record<GeometryKind, string> = {
+  sphere: "Sphere",
+  box: "Box",
+  torus: "Torus",
+  cone: "Cone",
+};
 
 /** Minimum ms between POSTs to /api/sensor (≈30Hz at 33ms). */
 const PUBLISH_INTERVAL_MS = 33;
@@ -87,29 +77,45 @@ export default function PhonePage() {
     setPermission("granted");
   }, []);
 
-  /**
-   * Tracks the last POST timestamp so we can throttle to PUBLISH_INTERVAL_MS.
-   * Stored in a ref (not state) so updating it doesn't trigger re-renders —
-   * the orientation handler reads/writes it on every gyro event (~60Hz).
-   */
   const lastPublishMsRef = useRef<number>(0);
 
-  /**
-   * Tracks the latest in-flight publish status. Purely for the on-screen
-   * "publishing OK / error" indicator — does not block publishing on error
-   * (gyro is a continuous stream; a dropped POST is fine, next one comes
-   * in ~33ms).
-   */
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [geometry, setGeometry] = useState<GeometryKind>("box");
+  const [geometryError, setGeometryError] = useState<string | null>(null);
 
-  // When permission flips to "granted":
-  //   1. Listen for deviceorientation events
-  //   2. On each event: update local UI state AND (if throttle allows)
-  //      POST the value to /api/sensor for relay through Pusher
-  //
-  // The cleanup function (returned from the effect) detaches the listener
-  // when permission changes back to "idle" (e.g. force reset) or when the
-  // component unmounts. This prevents memory leaks and stale handlers.
+  const publishGeometry = useCallback((next: GeometryKind) => {
+    const message: GeometryMessage = {
+      type: "geometry",
+      geometry: next,
+      timestamp: Date.now(),
+    };
+    fetch("/api/sensor", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(message),
+      keepalive: true,
+    })
+      .then((res) => {
+        if (!res.ok) setGeometryError(`HTTP ${res.status}`);
+        else setGeometryError(null);
+      })
+      .catch((err: unknown) => {
+        setGeometryError(err instanceof Error ? err.message : "network error");
+      });
+  }, []);
+
+  const handleGeometryChange = useCallback(
+    (key: Key | null) => {
+      if (key === null) return;
+      const next = String(key);
+      if (!(GEOMETRY_KINDS as readonly string[]).includes(next)) return;
+      const kind = next as GeometryKind;
+      setGeometry(kind);
+      publishGeometry(kind);
+    },
+    [publishGeometry],
+  );
+
   useEffect(() => {
     if (permission !== "granted") return;
 
@@ -160,6 +166,40 @@ export default function PhonePage() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-8 bg-zinc-950 p-6 text-zinc-100">
       <h1 className="text-2xl font-semibold">Phone — Gyro Source</h1>
+
+      <div className="flex flex-col items-center gap-3">
+        <Select
+          className="w-[256px]"
+          placeholder="Select geometry"
+          selectedKey={geometry}
+          onSelectionChange={handleGeometryChange}
+        >
+          <Label>Geometry</Label>
+          <Select.Trigger>
+            <Select.Value />
+            <Select.Indicator />
+          </Select.Trigger>
+          <Select.Popover>
+            <ListBox>
+              {GEOMETRY_KINDS.map((kind) => (
+                <ListBox.Item
+                  key={kind}
+                  id={kind}
+                  textValue={GEOMETRY_LABELS[kind]}
+                >
+                  {GEOMETRY_LABELS[kind]}
+                  <ListBox.ItemIndicator />
+                </ListBox.Item>
+              ))}
+            </ListBox>
+          </Select.Popover>
+        </Select>
+        {geometryError && (
+          <span className="text-xs text-red-400">
+            Geometry sync error: {geometryError}
+          </span>
+        )}
+      </div>
 
       {permission === "idle" && (
         <button
@@ -235,7 +275,7 @@ function ValueCard({
   unit: string;
 }) {
   return (
-    <div className="flex min-w-[80px] flex-col items-center rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2">
+    <div className="flex min-w-20 flex-col items-center rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2">
       <span className="text-[10px] uppercase tracking-wider text-zinc-500">
         {label}
       </span>
