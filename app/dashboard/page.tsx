@@ -87,7 +87,8 @@ export default function DashboardPage() {
   // Date.now() even when no Pusher messages arrive (e.g. phone disconnected).
   // Without this, the component goes to sleep and isLive stays frozen at "true".
   // We discard the value [,] — we only need the side-effect of triggering a render.
-  const [, setNow] = useState(0);
+  const [now, setNow] = useState(0);
+
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(id);
@@ -95,7 +96,7 @@ export default function DashboardPage() {
 
   // Detect stale data — recomputed every render (now every 500ms minimum).
   // Uses STALE_AFTER_MS constant — single source of truth shared with GyroDrivenCube.
-  const isLive = latest !== null && Date.now() - latest.timestamp < STALE_AFTER_MS;
+  const isLive = latest !== null && now - latest.timestamp < STALE_AFTER_MS;
 
   return (
     <main className="flex min-h-screen flex-col bg-zinc-950 text-zinc-100  h-dvh">
@@ -221,9 +222,9 @@ function GyroDrivenCube({
 
     // Build the target orientation from DeviceOrientation Euler angles
     eulerRef.current.set(
-      MathUtils.degToRad(message.beta),    // X axis: pitch
-      MathUtils.degToRad(message.alpha),   // Y axis: yaw
-      -MathUtils.degToRad(message.gamma),  // Z axis: roll (negated for Three.js handedness)
+      MathUtils.degToRad(message.beta), // X axis: pitch
+      MathUtils.degToRad(message.alpha), // Y axis: yaw
+      -MathUtils.degToRad(message.gamma), // Z axis: roll (negated for Three.js handedness)
       "YXZ",
     );
     targetQuaternionRef.current.setFromEuler(eulerRef.current);

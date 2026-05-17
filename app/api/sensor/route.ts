@@ -43,7 +43,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!isSensorMessage(body)) {
     return NextResponse.json(
       { error: "Body does not match SensorMessage schema" },
-      { status: 422 }
+      { status: 422 },
     );
   }
 
@@ -55,11 +55,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     console.error("[/api/sensor] Pusher trigger failed:", err);
     return NextResponse.json(
       { error: "Upstream relay failed" },
-      { status: 502 }
+      { status: 502 },
     );
   }
 
-  // 204 No Content — we don't need to send anything back.
-  // Saves a few bytes per call (multiplied by 30Hz it adds up).
   return new NextResponse(null, { status: 204 });
 }
