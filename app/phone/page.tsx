@@ -244,7 +244,7 @@ export default function PhonePage() {
             </span>
           )}
           <p className="max-w-sm text-center text-xs text-zinc-500">
-            Move/tilt your phone — open /dashboard on another device to see it.
+            Move/tilt your phone — open the dashboard (/) on another device to see it.
           </p>
         </div>
       )}
