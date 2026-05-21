@@ -44,7 +44,7 @@ export default function Home() {
     const cluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER;
     if (!key || !cluster) {
       console.warn(
-        "[dashboard] NEXT_PUBLIC_PUSHER_KEY / NEXT_PUBLIC_PUSHER_CLUSTER not set — dashboard will show 'waiting' forever.",
+        "[home] NEXT_PUBLIC_PUSHER_KEY / NEXT_PUBLIC_PUSHER_CLUSTER not set — dashboard will show 'waiting' forever.",
       );
       return;
     }
@@ -83,9 +83,9 @@ export default function Home() {
     return () => clearInterval(id);
   }, []);
 
-  const phoneUrl = useSyncExternalStore<string | null>(
+  const hostInfo = useSyncExternalStore<HostInfo | null>(
     subscribeNoop,
-    () => `${window.location.origin}/phone`,
+    getHostInfo,
     () => null,
   );
 
@@ -125,24 +125,41 @@ export default function Home() {
 
       {/* The 3D canvas fills the rest of the viewport */}
       <div className="relative flex-1">
-        {!isLive && phoneUrl && (
+        {!isLive && hostInfo && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-zinc-950/80 backdrop-blur-sm">
-            <div className="flex flex-col items-center gap-4 rounded-lg border border-zinc-800 bg-zinc-900 p-6 shadow-xl">
-              <h2 className="text-base font-semibold text-zinc-100">
-                Connect your phone
-              </h2>
-              <p className="max-w-xs text-center text-xs text-zinc-400">
-                Scan this QR code with your phone to open the gyro source page.
-              </p>
-              <div className="rounded-md bg-white p-3">
-                <QRCodeSVG value={phoneUrl} size={192} />
-              </div>
-              <a
-                href={phoneUrl}
-                className="break-all text-center text-xs text-zinc-500 underline underline-offset-4 hover:text-zinc-300"
-              >
-                {phoneUrl}
-              </a>
+            <div className="flex max-w-sm flex-col items-center gap-4 rounded-lg border border-zinc-800 bg-zinc-900 p-6 shadow-xl">
+              {hostInfo.reachable ? (
+                <>
+                  <h2 className="text-base font-semibold text-zinc-100">
+                    Connect your phone
+                  </h2>
+                  <p className="text-center text-xs text-zinc-400">
+                    Scan this QR code with your phone to open the gyro source page.
+                  </p>
+                  <div className="rounded-md bg-white p-3">
+                    <QRCodeSVG value={hostInfo.phoneUrl} size={192} />
+                  </div>
+                  <a
+                    href={hostInfo.phoneUrl}
+                    className="break-all text-center text-xs text-zinc-500 underline underline-offset-4 hover:text-zinc-300"
+                  >
+                    {hostInfo.phoneUrl}
+                  </a>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-base font-semibold text-yellow-400">
+                    Dev server on localhost
+                  </h2>
+                  <p className="text-center text-xs text-zinc-400">
+                    Your phone can&apos;t reach{" "}
+                    <code className="rounded bg-zinc-800 px-1">{hostInfo.hostname}</code>.
+                    Open this dashboard via your machine&apos;s LAN IP (e.g.{" "}
+                    <code className="rounded bg-zinc-800 px-1">http://192.168.x.x:3000</code>
+                    ) or an ngrok / tunnel URL, then a QR will appear here.
+                  </p>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -176,6 +193,23 @@ export default function Home() {
 }
 
 const subscribeNoop = (): (() => void) => () => {};
+
+type HostInfo = {
+  phoneUrl: string;
+  hostname: string;
+  /** False when running on localhost/127.0.0.1 — a QR encoding that host can't be reached from a phone. */
+  reachable: boolean;
+};
+
+let cachedHostInfo: HostInfo | null = null;
+
+function getHostInfo(): HostInfo {
+  if (cachedHostInfo) return cachedHostInfo;
+  const { hostname, origin } = window.location;
+  const reachable = hostname !== "localhost" && hostname !== "127.0.0.1";
+  cachedHostInfo = { phoneUrl: `${origin}/phone`, hostname, reachable };
+  return cachedHostInfo;
+}
 
 /** Format a degrees value (or null/undefined) for compact header display. */
 function fmt(value: number | null | undefined): string {
