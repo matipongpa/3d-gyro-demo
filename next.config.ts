@@ -5,7 +5,10 @@ const nextConfig: NextConfig = {
 };
 
 module.exports = {
-  allowedDevOrigins: ["bridgeless-nonexistent-cheyenne.ngrok-free.dev"],
+  allowedDevOrigins: [
+    "bridgeless-nonexistent-cheyenne.ngrok-free.dev",
+    "192.168.1.129",
+  ],
 };
 
 export default nextConfig;
