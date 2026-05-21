@@ -26,7 +26,9 @@ import { getPusherServer } from "@/lib/pusher-server";
 import {
   SENSOR_CHANNEL_NAME,
   SENSOR_EVENT_NAME,
+  GEOMETRY_EVENT_NAME,
   isSensorMessage,
+  isGeometryMessage,
 } from "@/lib/sensor-channel";
 
 export const runtime = "nodejs"; // Pusher SDK needs Node runtime (uses crypto)
@@ -40,16 +42,22 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  if (!isSensorMessage(body)) {
+  const eventName = isSensorMessage(body)
+    ? SENSOR_EVENT_NAME
+    : isGeometryMessage(body)
+      ? GEOMETRY_EVENT_NAME
+      : null;
+
+  if (eventName === null) {
     return NextResponse.json(
-      { error: "Body does not match SensorMessage schema" },
+      { error: "Body does not match SensorMessage or GeometryMessage schema" },
       { status: 422 },
     );
   }
 
   try {
     const pusher = getPusherServer();
-    await pusher.trigger(SENSOR_CHANNEL_NAME, SENSOR_EVENT_NAME, body);
+    await pusher.trigger(SENSOR_CHANNEL_NAME, eventName, body);
   } catch (err) {
     // Don't leak internals to the client — log + return generic error.
     console.error("[/api/sensor] Pusher trigger failed:", err);

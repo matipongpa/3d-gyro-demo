@@ -8,8 +8,11 @@ import Pusher from "pusher-js";
 import {
   SENSOR_CHANNEL_NAME,
   SENSOR_EVENT_NAME,
+  GEOMETRY_EVENT_NAME,
   isSensorMessage,
+  isGeometryMessage,
   type SensorMessage,
+  type GeometryKind,
 } from "@/lib/sensor-channel";
 
 /** How many ms before a gyro message is considered stale (cube stops following). */
@@ -22,37 +25,18 @@ const STALE_AFTER_MS = 2000;
  */
 const ROTATION_SMOOTHING = 0.2;
 
-const SHAPE = {
-  BOX: "box",
-  SPHERE: "sphere",
-  CONE: "cone",
-  TORUS: "torus",
-} as const;
+const GEOMETRY_COLOR: Record<GeometryKind, string> = {
+  box: "#3b82f6",
+  sphere: "#22c55e",
+  torus: "#f97316",
+  cone: "#ef4444",
+};
 
-type Shape = (typeof SHAPE)[keyof typeof SHAPE]; // "box" | "sphere" | "cone" | "torus"
-
-interface ObjectPosition {
-  x: number;
-  y: number;
-  z: number;
-}
-
-interface RotationSpeed {
-  x: number;
-  y: number;
-  z: number;
-}
-
-interface RotationMeshProps {
-  shape: Shape;
-  position: ObjectPosition;
-  rotationSpeed: RotationSpeed;
-  color: string;
-}
 export default function DashboardPage() {
   // Latest sensor reading received from /phone via Pusher.
   // Null until the first message arrives.
   const [latest, setLatest] = useState<SensorMessage | null>(null);
+  const [geometry, setGeometry] = useState<GeometryKind>("box");
 
   useEffect(() => {
     const key = process.env.NEXT_PUBLIC_PUSHER_KEY;
@@ -74,19 +58,23 @@ export default function DashboardPage() {
       }
     };
 
+    const handleGeometry = (data: unknown) => {
+      if (isGeometryMessage(data)) {
+        setGeometry(data.geometry);
+      }
+    };
+
     channel.bind(SENSOR_EVENT_NAME, handleMessage);
+    channel.bind(GEOMETRY_EVENT_NAME, handleGeometry);
 
     return () => {
       channel.unbind(SENSOR_EVENT_NAME, handleMessage);
+      channel.unbind(GEOMETRY_EVENT_NAME, handleGeometry);
       pusher.unsubscribe(SENSOR_CHANNEL_NAME);
       pusher.disconnect();
     };
   }, []);
 
-  // Fix 1: force a re-render every 500ms so isLive is recomputed against a fresh
-  // Date.now() even when no Pusher messages arrive (e.g. phone disconnected).
-  // Without this, the component goes to sleep and isLive stays frozen at "true".
-  // We discard the value [,] — we only need the side-effect of triggering a render.
   const [now, setNow] = useState(0);
 
   useEffect(() => {
@@ -141,37 +129,14 @@ export default function DashboardPage() {
           {/* Lighting — without this, MeshStandardMaterial renders black */}
           <ambientLight intensity={1} />
           <directionalLight position={[5, 5, 5]} intensity={1} />
-          {/* The cube */}
-          <RotationMesh
-            shape={SHAPE.BOX}
-            position={{ y: 0, x: -4, z: 0 }}
-            rotationSpeed={{ x: 1, y: 0, z: 0 }}
-            color="red"
-          />
-          <RotationMesh
-            shape={SHAPE.SPHERE}
-            position={{ y: 0, x: 0, z: 0 }}
-            rotationSpeed={{ x: 0, y: 1, z: 0 }}
-            color="green"
-          />
-          <RotationMesh
-            shape={SHAPE.CONE}
-            position={{ y: 0, x: 4, z: 0 }}
-            rotationSpeed={{ x: 0, y: 0, z: 1 }}
-            color="blue"
-          />
-          <RotationMesh
-            shape={SHAPE.TORUS}
-            position={{ y: 4, x: 0, z: 0 }}
-            rotationSpeed={{ x: 0, y: 0, z: 1 }}
-            color="orange"
-          />
 
-          {/* THE HERO OBJECT: rotates with your phone's gyroscope in real-time.
-              Positioned below the auto-rotating shapes so the demo focus is clear:
-              if you tilt the phone, this is the cube that responds. */}
-          {/* isLive prop — single source of truth from parent, no duplicate check */}
-          <GyroDrivenCube message={latest} isLive={isLive} />
+          {/* The hero mesh: geometry is driven by /phone's selection,
+              rotation by /phone's gyroscope. */}
+          <GyroDrivenMesh
+            message={latest}
+            isLive={isLive}
+            geometry={geometry}
+          />
 
           {/* Drei helper: drag to orbit the camera, scroll to zoom.
               Useful for debugging — you can rotate around the scene. */}
@@ -188,12 +153,14 @@ function fmt(value: number | null | undefined): string {
   return `${value.toFixed(1)}°`;
 }
 
-function GyroDrivenCube({
+function GyroDrivenMesh({
   message,
-  isLive, // Fix 2+3: received from parent — single source of truth, no local duplicate
+  isLive,
+  geometry,
 }: {
   message: SensorMessage | null;
   isLive: boolean;
+  geometry: GeometryKind;
 }) {
   const meshRef = useRef<Mesh>(null);
   const eulerRef = useRef<Euler>(new Euler());
@@ -213,11 +180,6 @@ function GyroDrivenCube({
       return;
     }
 
-    // Fix 3: keep this timestamp check HERE (inside useFrame, 60fps) for the
-    // rotation decision only. This stops rotation immediately when data goes stale,
-    // without waiting for the next React render cycle.
-    // The cube COLOR uses the isLive prop (from parent) — that's the UI concern.
-    // The rotation DECISION uses Date.now() directly — that's the timing concern.
     if (Date.now() - message.timestamp > STALE_AFTER_MS) return;
 
     // Build the target orientation from DeviceOrientation Euler angles
@@ -234,50 +196,21 @@ function GyroDrivenCube({
   });
 
   return (
-    <mesh ref={meshRef} position={[0, -3, 0]}>
-      <boxGeometry args={[1.8, 1.8, 1.8]} />
-      <meshStandardMaterial
-        color={isLive ? "#facc15" : "#52525b"} // uses prop — consistent with header
-        metalness={0.3}
-        roughness={0.35}
-      />
-    </mesh>
-  );
-}
-
-function RotationMesh({
-  shape,
-  position,
-  rotationSpeed,
-  color,
-}: RotationMeshProps) {
-  const meshRef = useRef<Mesh>(null);
-
-  useFrame((_, delta) => {
-    if (!meshRef.current) return;
-    // Rotate ~0.5 rad/sec on each axis — slow enough to look smooth
-    meshRef.current.rotation.x += delta * rotationSpeed.x;
-    meshRef.current.rotation.y += delta * rotationSpeed.y;
-    meshRef.current.rotation.z += delta * rotationSpeed.z;
-  });
-
-  return (
-    <mesh ref={meshRef} position={[position.x, position.y, position.z]}>
-      {/* args = constructor arguments passed to BoxGeometry(width, height, depth) */}
-      {shape === SHAPE.BOX ? (
-        <boxGeometry args={[1.5, 1.5, 1.5]} />
-      ) : shape === SHAPE.SPHERE ? (
-        <sphereGeometry args={[1, 32, 32]} />
-      ) : shape === SHAPE.TORUS ? (
-        <torusGeometry args={[1, 0.4, 16, 100]} />
+    <mesh ref={meshRef} position={[0, 0, 0]}>
+      {geometry === "box" ? (
+        <boxGeometry args={[1.8, 1.8, 1.8]} />
+      ) : geometry === "sphere" ? (
+        <sphereGeometry args={[1.2, 32, 32]} />
+      ) : geometry === "cone" ? (
+        <coneGeometry args={[1, 2, 32]} />
       ) : (
-        <coneGeometry args={[1, 1, 20]} />
+        <torusGeometry args={[1, 0.4, 16, 100]} />
       )}
       <meshStandardMaterial
-        color={color}
-        metalness={0.2}
-        roughness={0.4}
-        wireframe={shape === SHAPE.SPHERE}
+        color={isLive ? GEOMETRY_COLOR[geometry] : "#52525b"}
+        metalness={0.3}
+        roughness={0.35}
+        wireframe={geometry === "sphere"}
       />
     </mesh>
   );
