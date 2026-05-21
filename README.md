@@ -3,7 +3,7 @@
 A real-time, cross-device demo where a phone streams its gyroscope orientation to a desktop dashboard that renders a 3D shape rotating in sync. The user can pick the geometry (box / sphere / torus / cone) on the phone and the dashboard switches to it live.
 
 ```
-[iPhone /phone] ──HTTP POST──> [Next.js /api/sensor] ──pusher.trigger──> [Pusher Cloud] ──WSS──> [Desktop /dashboard]
+[iPhone /phone] ──HTTP POST──> [Next.js /api/sensor] ──pusher.trigger──> [Pusher Cloud] ──WSS──> [Desktop / ]
        │                                                                                              │
        └─ DeviceOrientation @ ~60Hz (throttled to ~30Hz)                                              └─ react-three-fiber Canvas
        └─ Geometry select  (event: "geometry")                                                        └─ Quaternion slerp @ rAF
@@ -22,12 +22,11 @@ A real-time, cross-device demo where a phone streams its gyroscope orientation t
 
 ## Pages
 
-| Route         | Purpose                                                                                |
-| ------------- | -------------------------------------------------------------------------------------- |
-| `/`           | Landing — links to `/phone` and `/dashboard`                                           |
-| `/phone`      | Capture device orientation, pick a geometry, fire-and-forget POSTs to `/api/sensor`    |
-| `/dashboard`  | Subscribe to Pusher, render the live-rotating selected geometry                        |
-| `/api/sensor` | POST endpoint that validates the payload and `pusher.trigger`s the right Pusher event  |
+| Route         | Purpose                                                                                                |
+| ------------- | ------------------------------------------------------------------------------------------------------ |
+| `/`           | Dashboard — Pusher subscriber + react-three-fiber Canvas; overlays a QR to `/phone` when no live data  |
+| `/phone`      | Capture device orientation, pick a geometry, fire-and-forget POSTs to `/api/sensor`                    |
+| `/api/sensor` | POST endpoint that validates the payload and `pusher.trigger`s the right Pusher event                  |
 
 ## Pusher channel/event protocol
 
@@ -83,7 +82,7 @@ NEXT_PUBLIC_PUSHER_CLUSTER=ap1
 npm run dev
 ```
 
-Open `http://localhost:3000/dashboard` on your laptop.
+Open `http://localhost:3000` on your laptop — you'll see the dashboard with a QR-overlay placeholder (the QR itself only renders once you're on a LAN IP / tunnel host, since `localhost` isn't reachable from the phone).
 
 ### 4. Reach the phone over HTTPS
 
@@ -115,9 +114,8 @@ npm run typecheck  # tsc --noEmit
 app/
 ├── layout.tsx              # Root layout, dark theme wiring (data-theme="dark", className="dark")
 ├── globals.css             # Tailwind v4 + HeroUI styles, forced dark color-scheme
-├── page.tsx                # Landing page
+├── page.tsx                # Dashboard (Pusher subscriber + r3f Canvas + QR overlay)
 ├── phone/page.tsx          # Phone capture + geometry picker
-├── dashboard/page.tsx      # Pusher subscriber + react-three-fiber Canvas
 └── api/sensor/route.ts     # POST handler: validates body, dispatches to Pusher
 lib/
 ├── sensor-channel.ts       # Shared types, constants, runtime type guards
